@@ -60,3 +60,5 @@ Las capas principales son:
 Bronze: contiene el archivo crudo descargado de Kaggle.
 Silver: contiene los datos limpios y transformados.
 Gold: contiene las predicciones de churn, niveles de riesgo y métricas del modelo.
+---
+jajaja
