@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# Virtual environment
+.venv/
+.env
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Local data layers
+data/raw/
+data/bronze/
+data/silver/
+data/gold/
+
+# Artifacts
+artifacts/
+models/
+*.joblib
+*.pkl
+
+# AWS / secrets
+.aws/
+kaggle.json
+
+# OS
+.DS_Store
