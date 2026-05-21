@@ -76,7 +76,7 @@ método de pago
 variable objetivo Churn
 
 Estructura del Repositorio 
-
+```text
 
 churn_data_product_starter/
 │
@@ -100,7 +100,7 @@ churn_data_product_starter/
 └── README.md
 
 
-
+```
 
 
 Componentes principales:
