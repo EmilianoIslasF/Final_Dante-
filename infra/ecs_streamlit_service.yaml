@@ -1,0 +1,207 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "ECS Fargate deployment for the churn Streamlit app behind an Application Load Balancer."
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: churn-data-product
+
+  ContainerImageUri:
+    Type: String
+    Description: ECR image URI for the Streamlit app.
+
+  DataBucketName:
+    Type: String
+    Default: churn-data-product-780191826160-2026
+
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC where ECS and ALB will be deployed.
+
+  PublicSubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: Public subnets for the ALB and ECS tasks.
+
+  ContainerPort:
+    Type: Number
+    Default: 8501
+
+Resources:
+  StreamlitCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: !Sub "${ProjectName}-cluster"
+
+  StreamlitLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/ecs/${ProjectName}/streamlit"
+      RetentionInDays: 7
+
+  StreamlitTaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${ProjectName}-ecs-execution-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+
+  StreamlitTaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${ProjectName}-ecs-task-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: ReadChurnDataProductBucket
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:ListBucket
+                Resource: !Sub "arn:aws:s3:::${DataBucketName}"
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                Resource: !Sub "arn:aws:s3:::${DataBucketName}/*"
+
+  AlbSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow HTTP access to the churn Streamlit ALB.
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+
+  TaskSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow ALB access to the Streamlit ECS task.
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: !Ref ContainerPort
+          ToPort: !Ref ContainerPort
+          SourceSecurityGroupId: !Ref AlbSecurityGroup
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+
+  StreamlitLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: churn-streamlit-alb
+      Scheme: internet-facing
+      Type: application
+      SecurityGroups:
+        - !Ref AlbSecurityGroup
+      Subnets: !Ref PublicSubnetIds
+
+  StreamlitTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: churn-streamlit-tg
+      Port: !Ref ContainerPort
+      Protocol: HTTP
+      TargetType: ip
+      VpcId: !Ref VpcId
+      HealthCheckPath: /
+      HealthCheckProtocol: HTTP
+      Matcher:
+        HttpCode: "200-399"
+
+  StreamlitListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref StreamlitLoadBalancer
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref StreamlitTargetGroup
+
+  StreamlitTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub "${ProjectName}-streamlit-task"
+      RequiresCompatibilities:
+        - FARGATE
+      NetworkMode: awsvpc
+      Cpu: "512"
+      Memory: "1024"
+      ExecutionRoleArn: !GetAtt StreamlitTaskExecutionRole.Arn
+      TaskRoleArn: !GetAtt StreamlitTaskRole.Arn
+      ContainerDefinitions:
+        - Name: streamlit
+          Image: !Ref ContainerImageUri
+          Essential: true
+          PortMappings:
+            - ContainerPort: !Ref ContainerPort
+              Protocol: tcp
+          Environment:
+            - Name: CHURN_BUCKET
+              Value: !Ref DataBucketName
+            - Name: AWS_REGION
+              Value: !Ref AWS::Region
+            - Name: CHURN_PREDICTIONS_KEY
+              Value: gold/predictions/churn_predictions.parquet
+            - Name: CHURN_METRICS_KEY
+              Value: gold/metrics/model_metrics.csv
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref StreamlitLogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: ecs
+
+  StreamlitService:
+    Type: AWS::ECS::Service
+    DependsOn:
+      - StreamlitListener
+    Properties:
+      ServiceName: !Sub "${ProjectName}-streamlit-service"
+      Cluster: !Ref StreamlitCluster
+      LaunchType: FARGATE
+      DesiredCount: 1
+      TaskDefinition: !Ref StreamlitTaskDefinition
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          SecurityGroups:
+            - !Ref TaskSecurityGroup
+          Subnets: !Ref PublicSubnetIds
+      LoadBalancers:
+        - ContainerName: streamlit
+          ContainerPort: !Ref ContainerPort
+          TargetGroupArn: !Ref StreamlitTargetGroup
+
+Outputs:
+  LoadBalancerDNSName:
+    Description: Public URL for the Streamlit app.
+    Value: !Sub "http://${StreamlitLoadBalancer.DNSName}"
+
+  ClusterName:
+    Description: ECS cluster name.
+    Value: !Ref StreamlitCluster
+
+  ServiceName:
+    Description: ECS service name.
+    Value: !GetAtt StreamlitService.Name
