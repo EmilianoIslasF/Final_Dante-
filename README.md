@@ -200,3 +200,10 @@ El dashboard ayuda al equipo de retención a identificar clientes con mayor prob
 
 
 <img width="1582" height="1121" alt="Final_drawww drawio" src="https://github.com/user-attachments/assets/579783c4-3ec7-479c-8374-2ec865c018ac" />
+
+## Aplicación desplegada
+
+La aplicación de Streamlit está desplegada en AWS ECS Fargate y puede consultarse en:
+
+PENDIENTE: pegar aquí el LoadBalancerDNSName público.
+
