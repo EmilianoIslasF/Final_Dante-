@@ -14,3 +14,10 @@ Está chiquito: aprox. 7043 clientes y 21 columnas.
 La variable objetivo ya viene lista: Churn.
 Sirve perfecto para clasificación: cliente se va / cliente no se va.
 Tiene variables fáciles de explicar: contrato, antigüedad, cargos mensuales, método de pago, servicios contratados, etc.
+
+
+
+El enlace para ejecución local 
+
+
+http://192.168.0.17:8501
