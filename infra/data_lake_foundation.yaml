@@ -1,0 +1,100 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "Foundation infrastructure for the churn data product: S3, Glue Catalog and ECR."
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: churn-data-product
+    Description: Project name used for resource names and tags.
+
+  DataBucketName:
+    Type: String
+    Default: itam-churn-317521775-2026
+    Description: Existing or new S3 bucket for the data lake.
+
+  CreateDataBucket:
+    Type: String
+    Default: "false"
+    AllowedValues:
+      - "true"
+      - "false"
+    Description: Set to true only if the S3 bucket does not exist yet.
+
+Conditions:
+  ShouldCreateDataBucket: !Equals [!Ref CreateDataBucket, "true"]
+
+Resources:
+  DataBucket:
+    Type: AWS::S3::Bucket
+    Condition: ShouldCreateDataBucket
+    Properties:
+      BucketName: !Ref DataBucketName
+      VersioningConfiguration:
+        Status: Suspended
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      Tags:
+        - Key: project
+          Value: !Ref ProjectName
+        - Key: layer
+          Value: data-lake
+
+  BronzeDatabase:
+    Type: AWS::Glue::Database
+    Properties:
+      CatalogId: !Ref AWS::AccountId
+      DatabaseInput:
+        Name: churn_bronze
+        Description: Bronze layer for raw churn data.
+
+  SilverDatabase:
+    Type: AWS::Glue::Database
+    Properties:
+      CatalogId: !Ref AWS::AccountId
+      DatabaseInput:
+        Name: churn_silver
+        Description: Silver layer for cleaned churn data.
+
+  GoldDatabase:
+    Type: AWS::Glue::Database
+    Properties:
+      CatalogId: !Ref AWS::AccountId
+      DatabaseInput:
+        Name: churn_gold
+        Description: Gold layer for model predictions and metrics.
+
+  StreamlitEcrRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: churn-streamlit-app
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      Tags:
+        - Key: project
+          Value: !Ref ProjectName
+        - Key: component
+          Value: streamlit-app
+
+Outputs:
+  DataBucketName:
+    Description: S3 bucket used by the data product.
+    Value: !Ref DataBucketName
+
+  BronzeDatabaseName:
+    Description: Glue database for raw data.
+    Value: !Ref BronzeDatabase
+
+  SilverDatabaseName:
+    Description: Glue database for cleaned data.
+    Value: !Ref SilverDatabase
+
+  GoldDatabaseName:
+    Description: Glue database for model outputs.
+    Value: !Ref GoldDatabase
+
+  StreamlitEcrRepositoryUri:
+    Description: ECR repository URI for the Streamlit Docker image.
+    Value: !GetAtt StreamlitEcrRepository.RepositoryUri
