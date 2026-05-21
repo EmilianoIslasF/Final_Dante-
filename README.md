@@ -21,3 +21,42 @@ El enlace para ejecución local
 
 
 http://192.168.0.17:8501
+
+
+
+---
+
+## Arquitectura general
+
+El proyecto sigue una arquitectura tipo medallion en AWS:
+
+```text
+Kaggle Dataset
+   ↓
+S3 Bronze
+   ↓
+ETL / Preprocesamiento
+   ↓
+S3 Silver
+   ↓
+Entrenamiento y scoring del modelo
+   ↓
+S3 Gold
+   ↓
+Glue Data Catalog
+   ↓
+Athena
+   ↓
+Streamlit App
+   ↓
+Docker + ECR + ECS Fargate
+   ↓
+URL pública
+
+
+
+Las capas principales son:
+
+Bronze: contiene el archivo crudo descargado de Kaggle.
+Silver: contiene los datos limpios y transformados.
+Gold: contiene las predicciones de churn, niveles de riesgo y métricas del modelo.
