@@ -1,24 +1,28 @@
 """
-Entrena modelos de churn y genera la capa gold con predicciones y métricas.
+Entrena modelos de churn y genera la capa Gold del producto de datos.
+
+Este módulo:
+1. Lee la capa Silver desde S3.
+2. Entrena modelos de clasificación para predecir churn.
+3. Selecciona el mejor modelo por ROC AUC.
+4. Genera predicciones, niveles de riesgo y métricas.
+5. Guarda outputs en S3 para consumo de Streamlit.
 
 Ejemplo:
-python src/03_gold.py \
-  --bucket churn-project-itam \
+uv run python src/03_gold.py \
+  --bucket itam-churn-317521775-2026 \
   --silver-key silver/customers_clean.parquet \
   --gold-prefix gold \
-  --artifact-key artifacts/churn_model.joblib
+  --artifact-key gold/artifacts/churn_model.joblib
 """
 
 from __future__ import annotations
 
 import argparse
-from io import BytesIO
-from pathlib import Path
-
+from io import BytesIO, StringIO
 
 import boto3
 import joblib
-import numpy as np
 import pandas as pd
 from sklearn.compose import ColumnTransformer
 from sklearn.ensemble import RandomForestClassifier
@@ -40,31 +44,42 @@ ID_COL = "customer_id"
 
 
 def read_parquet_from_s3(bucket: str, key: str) -> pd.DataFrame:
+    """Read a Parquet file from S3 and return it as a pandas DataFrame."""
     s3 = boto3.client("s3")
     obj = s3.get_object(Bucket=bucket, Key=key)
     return pd.read_parquet(BytesIO(obj["Body"].read()))
 
 
 def put_bytes_to_s3(data: bytes, bucket: str, key: str) -> None:
+    """Upload bytes to an S3 object."""
     s3 = boto3.client("s3")
     s3.put_object(Bucket=bucket, Key=key, Body=data)
 
 
 def write_df_csv_to_s3(df: pd.DataFrame, bucket: str, key: str) -> None:
-    buffer = BytesIO()
+    """Write a DataFrame as CSV to S3."""
+    buffer = StringIO()
     df.to_csv(buffer, index=False)
-    put_bytes_to_s3(buffer.getvalue(), bucket, key)
+    put_bytes_to_s3(buffer.getvalue().encode("utf-8"), bucket, key)
 
 
 def write_df_parquet_to_s3(df: pd.DataFrame, bucket: str, key: str) -> None:
+    """Write a DataFrame as Parquet to S3."""
     buffer = BytesIO()
     df.to_parquet(buffer, index=False)
+    buffer.seek(0)
     put_bytes_to_s3(buffer.getvalue(), bucket, key)
 
 
 def build_preprocessor(X: pd.DataFrame) -> ColumnTransformer:
-    numeric_features = X.select_dtypes(include=["int64", "float64", "int32", "float32"]).columns.tolist()
-    categorical_features = X.select_dtypes(include=["object", "category", "bool"]).columns.tolist()
+    """Create preprocessing pipeline for numeric and categorical variables."""
+    numeric_features = X.select_dtypes(
+        include=["int64", "float64", "int32", "float32"]
+    ).columns.tolist()
+
+    categorical_features = X.select_dtypes(
+        include=["object", "category", "bool"]
+    ).columns.tolist()
 
     return ColumnTransformer(
         transformers=[
@@ -75,22 +90,23 @@ def build_preprocessor(X: pd.DataFrame) -> ColumnTransformer:
 
 
 def train_models(df: pd.DataFrame):
+    """Train candidate models and select the best one by ROC AUC."""
     X = df.drop(columns=[TARGET, ID_COL])
     y = df[TARGET].astype(int)
 
-    X_train, X_test, y_train, y_test, ids_train, ids_test = train_test_split(
+    X_train, X_test, y_train, y_test = train_test_split(
         X,
         y,
-        df[ID_COL],
         test_size=0.25,
         random_state=42,
         stratify=y,
     )
 
-    preprocessor = build_preprocessor(X_train)
-
     models = {
-        "logistic_regression": LogisticRegression(max_iter=1000, class_weight="balanced"),
+        "logistic_regression": LogisticRegression(
+            max_iter=1000,
+            class_weight="balanced",
+        ),
         "random_forest": RandomForestClassifier(
             n_estimators=300,
             random_state=42,
@@ -100,57 +116,61 @@ def train_models(df: pd.DataFrame):
     }
 
     results = []
-    trained = {}
+    trained_models = {}
 
-    for name, estimator in models.items():
-        pipe = Pipeline(
+    for model_name, estimator in models.items():
+        print(f"Entrenando modelo: {model_name}")
+
+        pipeline = Pipeline(
             steps=[
-                ("preprocess", preprocessor),
+                ("preprocess", build_preprocessor(X_train)),
                 ("model", estimator),
             ]
         )
 
-        print(f"Entrenando modelo: {name}")
-        pipe.fit(X_train, y_train)
+        pipeline.fit(X_train, y_train)
 
-        y_pred = pipe.predict(X_test)
-        y_prob = pipe.predict_proba(X_test)[:, 1]
+        y_pred = pipeline.predict(X_test)
+        y_prob = pipeline.predict_proba(X_test)[:, 1]
 
-        metrics = {
-            "model_name": name,
-            "accuracy": accuracy_score(y_test, y_pred),
-            "precision": precision_score(y_test, y_pred, zero_division=0),
-            "recall": recall_score(y_test, y_pred, zero_division=0),
-            "f1": f1_score(y_test, y_pred, zero_division=0),
-            "roc_auc": roc_auc_score(y_test, y_prob),
-        }
+        results.append(
+            {
+                "model_name": model_name,
+                "accuracy": accuracy_score(y_test, y_pred),
+                "precision": precision_score(y_test, y_pred, zero_division=0),
+                "recall": recall_score(y_test, y_pred, zero_division=0),
+                "f1": f1_score(y_test, y_pred, zero_division=0),
+                "roc_auc": roc_auc_score(y_test, y_prob),
+            }
+        )
 
-        results.append(metrics)
-        trained[name] = pipe
+        trained_models[model_name] = pipeline
 
     metrics_df = pd.DataFrame(results).sort_values("roc_auc", ascending=False)
     best_model_name = metrics_df.iloc[0]["model_name"]
-    best_model = trained[best_model_name]
+    best_model = trained_models[best_model_name]
 
-    print("Métricas:")
+    print("\nMétricas de modelos:")
     print(metrics_df)
-    print(f"Mejor modelo: {best_model_name}")
+    print(f"\nMejor modelo: {best_model_name}")
 
     return best_model_name, best_model, metrics_df
 
 
 def make_predictions(df: pd.DataFrame, model, model_name: str) -> pd.DataFrame:
+    """Generate churn probabilities, binary predictions and risk levels."""
     X = df.drop(columns=[TARGET, ID_COL])
-    prob = model.predict_proba(X)[:, 1]
-    pred = (prob >= 0.5).astype(int)
 
-    gold = pd.DataFrame(
+    prob_churn = model.predict_proba(X)[:, 1]
+    prediction = (prob_churn >= 0.5).astype(int)
+
+    gold_df = pd.DataFrame(
         {
             "customer_id": df[ID_COL],
-            "prob_churn": prob,
-            "prediction": pred,
+            "prob_churn": prob_churn,
+            "prediction": prediction,
             "risk_level": pd.cut(
-                prob,
+                prob_churn,
                 bins=[-0.01, 0.40, 0.70, 1.01],
                 labels=["Bajo", "Medio", "Alto"],
             ).astype(str),
@@ -171,17 +191,16 @@ def make_predictions(df: pd.DataFrame, model, model_name: str) -> pd.DataFrame:
 
     for col in context_cols:
         if col in df.columns:
-            gold[col] = df[col]
+            gold_df[col] = df[col]
 
-    gold = gold.sort_values("prob_churn", ascending=False)
-    return gold
+    return gold_df.sort_values("prob_churn", ascending=False)
 
 
 def save_model_to_s3(model, bucket: str, artifact_key: str) -> None:
+    """Serialize trained model and upload it to S3."""
     buffer = BytesIO()
     joblib.dump(model, buffer)
     buffer.seek(0)
-
     put_bytes_to_s3(buffer.getvalue(), bucket, artifact_key)
 
 
@@ -190,30 +209,32 @@ def main() -> None:
     parser.add_argument("--bucket", required=True)
     parser.add_argument("--silver-key", default="silver/customers_clean.parquet")
     parser.add_argument("--gold-prefix", default="gold")
-    parser.add_argument("--artifact-key", default="artifacts/churn_model.joblib")
+    parser.add_argument(
+        "--artifact-key",
+        default="gold/artifacts/churn_model.joblib",
+    )
 
     args = parser.parse_args()
 
-    print(f"Leyendo silver: s3://{args.bucket}/{args.silver_key}")
-    df = read_parquet_from_s3(args.bucket, args.silver_key)
+    print(f"Leyendo Silver: s3://{args.bucket}/{args.silver_key}")
+    silver_df = read_parquet_from_s3(args.bucket, args.silver_key)
 
-    best_model_name, best_model, metrics_df = train_models(df)
+    best_model_name, best_model, metrics_df = train_models(silver_df)
+    gold_df = make_predictions(silver_df, best_model, best_model_name)
 
-    gold_df = make_predictions(df, best_model, best_model_name)
+    predictions_key = f"{args.gold_prefix}/predictions/churn_predictions.parquet"
+    metrics_key = f"{args.gold_prefix}/metrics/model_metrics.csv"
 
-    predictions_key = f"{args.gold_prefix}/churn_predictions.parquet"
-    metrics_key = f"{args.gold_prefix}/model_metrics.csv"
-
-    print(f"Guardando predicciones gold: s3://{args.bucket}/{predictions_key}")
+    print(f"Guardando predicciones Gold: s3://{args.bucket}/{predictions_key}")
     write_df_parquet_to_s3(gold_df, args.bucket, predictions_key)
 
-    print(f"Guardando métricas gold: s3://{args.bucket}/{metrics_key}")
+    print(f"Guardando métricas Gold: s3://{args.bucket}/{metrics_key}")
     write_df_csv_to_s3(metrics_df, args.bucket, metrics_key)
 
-    print(f"Guardando modelo: s3://{args.bucket}/{args.artifact_key}")
+    print(f"Guardando modelo entrenado: s3://{args.bucket}/{args.artifact_key}")
     save_model_to_s3(best_model, args.bucket, args.artifact_key)
 
-    print("Gold terminado.")
+    print("Gold terminado correctamente.")
 
 
 if __name__ == "__main__":
