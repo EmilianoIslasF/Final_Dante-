@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-BUCKET="${CHURN_BUCKET:-itam-churn-317521775-2026}"
+BUCKET="${CHURN_BUCKET:-churn-data-product-780191826160-2026}"
 REGION="${AWS_REGION:-us-east-1}"
 
 echo "Using bucket: s3://${BUCKET}"

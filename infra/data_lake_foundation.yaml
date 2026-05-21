@@ -9,7 +9,7 @@ Parameters:
 
   DataBucketName:
     Type: String
-    Default: itam-churn-317521775-2026
+    Default: churn-data-product-780191826160-2026
     Description: Existing or new S3 bucket for the data lake.
 
   CreateDataBucket:

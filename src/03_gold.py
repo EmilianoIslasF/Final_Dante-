@@ -10,7 +10,7 @@ Este módulo:
 
 Ejemplo:
 uv run python src/03_gold.py \
-  --bucket itam-churn-317521775-2026 \
+  --bucket churn-data-product-780191826160-2026 \
   --silver-key silver/customers_clean.parquet \
   --gold-prefix gold \
   --artifact-key gold/artifacts/churn_model.joblib

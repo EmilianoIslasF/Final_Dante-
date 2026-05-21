@@ -7,7 +7,7 @@ import streamlit as st
 import plotly.express as px
 
 
-BUCKET = os.getenv("CHURN_BUCKET", "itam-churn-317521775-2026")
+BUCKET = os.getenv("CHURN_BUCKET", "churn-data-product-780191826160-2026")
 PREDICTIONS_KEY = os.getenv(
     "CHURN_PREDICTIONS_KEY",
     "gold/predictions/churn_predictions.parquet",

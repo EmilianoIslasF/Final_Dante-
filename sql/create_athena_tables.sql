@@ -26,7 +26,7 @@ CREATE EXTERNAL TABLE IF NOT EXISTS churn_db.customers_silver (
   churn int
 )
 STORED AS PARQUET
-LOCATION 's3://itam-churn-317521775-2026/silver/';
+LOCATION 's3://churn-data-product-780191826160-2026/silver/';
 
 -- Tabla gold de predicciones
 CREATE EXTERNAL TABLE IF NOT EXISTS churn_db.churn_predictions_gold (
@@ -45,7 +45,7 @@ CREATE EXTERNAL TABLE IF NOT EXISTS churn_db.churn_predictions_gold (
   churn int
 )
 STORED AS PARQUET
-LOCATION 's3://itam-churn-317521775-2026/gold/';
+LOCATION 's3://churn-data-product-780191826160-2026/gold/';
 
 -- Tabla gold de métricas
 CREATE EXTERNAL TABLE IF NOT EXISTS churn_db.model_metrics_gold (
@@ -61,5 +61,5 @@ WITH SERDEPROPERTIES (
   'separatorChar' = ',',
   'quoteChar' = '"'
 )
-LOCATION 's3://itam-churn-317521775-2026/gold/'
+LOCATION 's3://churn-data-product-780191826160-2026/gold/'
 TBLPROPERTIES ('skip.header.line.count'='1');
