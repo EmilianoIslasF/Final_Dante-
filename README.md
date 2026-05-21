@@ -104,14 +104,16 @@ churn_data_product_starter/
 
 
 Componentes principales:
-src/00_upload_local_to_bronze.py
+
+
+-src/00_upload_local_to_bronze.py
 
 Carga el archivo CSV crudo a Amazon S3 en la capa bronze.
 
 
 
 
-src/02_silver.py
+-src/02_silver.py
 
 Limpia y transforma los datos crudos.
 
@@ -126,9 +128,9 @@ generación de archivo Parquet
 
 
 
-src/03_gold.py
+-src/03_gold.py
 
-Entrena modelos de clasificación para predecir churn.
+```Entrena modelos de clasificación para predecir churn.
 
 Modelos utilizados:
 
@@ -143,7 +145,7 @@ Recall
 F1
 ROC AUC
 
-
+```
 
 
 sql/create_athena_tables.sql
@@ -166,11 +168,11 @@ visualizar métricas del modelo
 
 
 
-Despliegue
+```Despliegue
 
 La aplicación se empaqueta en una imagen Docker. Después, la imagen se publica en Amazon ECR y se ejecuta en ECS Fargate. El servicio se expone mediante un Application Load Balancer para que el usuario final pueda acceder a una URL pública.
 
-
+```
 
 
 
