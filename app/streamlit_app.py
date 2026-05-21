@@ -20,7 +20,6 @@ METRICS_KEY = os.getenv(
 
 st.set_page_config(
     page_title="Customer Churn Risk Dashboard",
-    page_icon="📉",
     layout="wide",
 )
 
@@ -68,7 +67,7 @@ def get_top_risk_factors(row: pd.Series) -> list[str]:
 
 
 def main():
-    st.title("📉 Customer Churn Risk Dashboard")
+    st.title("Customer Churn Risk Dashboard")
     st.caption(
         "Producto de datos para priorizar clientes con mayor probabilidad de abandono."
     )
