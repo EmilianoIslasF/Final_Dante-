@@ -60,5 +60,17 @@ Las capas principales son:
 Bronze: contiene el archivo crudo descargado de Kaggle.
 Silver: contiene los datos limpios y transformados.
 Gold: contiene las predicciones de churn, niveles de riesgo y métricas del modelo.
----
-jajaja
+´´´
+Fuente de datos
+
+El dataset utilizado es Telco Customer Churn de Kaggle.
+
+Cada fila representa un cliente e incluye variables como:
+
+tipo de contrato
+antigüedad del cliente
+cargos mensuales
+cargos totales
+servicios contratados
+método de pago
+variable objetivo Churn
