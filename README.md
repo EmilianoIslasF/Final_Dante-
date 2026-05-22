@@ -447,7 +447,10 @@ Principales componentes de costo:
 - almacenamiento de imagen en ECR
 - logs en CloudWatch
 
-Para una prueba de concepto con pocos datos y uso limitado, el costo esperado es bajo. Para producción, el costo dependería principalmente del tiempo activo de ECS Fargate, el uso del Load Balancer y la frecuencia de consultas en Athena.
+Bajo un escenario donde la aplicación permanece encendida todo el año, el costo anual estimado estaría aproximadamente entre **300 y 420 USD**. Si la aplicación se apaga cuando no está en uso, el costo puede bajar considerablemente, quedando por debajo de **50 USD al año** para una prueba de concepto de baja frecuencia de uso.
+
+Esta estimación puede variar según la región, el tráfico hacia la aplicación, el tiempo activo de ECS Fargate, el uso del Load Balancer, la cantidad de consultas en Athena y el volumen de datos almacenado.
+
 
 ---
 
