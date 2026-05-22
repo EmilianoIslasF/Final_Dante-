@@ -18,7 +18,6 @@ RUN uv sync --frozen --no-dev
 
 COPY app/ app/
 COPY src/ src/
-COPY sql/ sql/
 
 EXPOSE 8501
 

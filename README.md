@@ -1,209 +1,591 @@
-# Final_Dante-
-Proyecto final: churn-data-product
+# Customer Churn Data Product
 
+Producto de datos desplegado en AWS para ayudar a un equipo de retención o Customer Success a identificar clientes con mayor probabilidad de abandonar el servicio. La solución utiliza datos del dataset **Telco Customer Churn** de Kaggle, genera predicciones de churn mediante modelos de clasificación y expone los resultados en una aplicación web desarrollada en Streamlit.
 
-Una app para que un área de retención vea qué clientes tienen más riesgo de abandonar el servicio. El usuario final puede consultar clientes, ver su probabilidad de churn, entender los factores de riesgo y priorizar a quién contactar primero.
+El objetivo del producto es que el usuario final pueda priorizar clientes con mayor riesgo, consultar su probabilidad estimada de churn, revisar factores de riesgo simples y tomar mejores decisiones comerciales.
 
+---
 
+## Aplicación desplegada
 
+La aplicación está desplegada en AWS ECS Fargate y expuesta mediante un Application Load Balancer.
 
-los datos son de kaggle: 
+```text
+PEGAR_URL_PUBLICA_AQUI
+```
+
+---
+
+## Usuario final
+
+El usuario final es un equipo de retención, Customer Success o CRM de una empresa de telecomunicaciones. Este equipo necesita identificar qué clientes tienen mayor probabilidad de cancelar el servicio para priorizar acciones de retención.
+
+---
+
+## Problema que resuelve
+
+En lugar de contactar clientes al azar o depender únicamente de reglas manuales, el producto permite ordenar clientes según su probabilidad estimada de churn. Esto ayuda a enfocar recursos comerciales en los clientes con mayor riesgo y mayor urgencia de atención.
+
+---
+
+## Fuente de datos
+
+El dataset utilizado es **Telco Customer Churn** de Kaggle:
+
+```text
 https://www.kaggle.com/datasets/blastchar/telco-customer-churn/data
+```
 
-La base de datos no es tan grande: aprox. 7043 clientes y 21 columnas.
-La variable objetivo ya viene lista: Churn.
-Sirve perfecto para clasificación: cliente se va / cliente no se va.
-Tiene variables fáciles de explicar: contrato, antigüedad, cargos mensuales, método de pago, servicios contratados, etc.
+La base contiene aproximadamente 7,043 clientes y 21 columnas. Cada fila representa un cliente e incluye variables como:
 
+- tipo de contrato
+- antigüedad del cliente
+- cargos mensuales
+- cargos totales
+- servicios contratados
+- método de pago
+- variable objetivo `Churn`
 
-
-El enlace para ejecución local 
-
-
-http://192.168.0.17:8501
-
-
+La variable objetivo indica si el cliente abandonó o no el servicio.
 
 ---
 
 ## Arquitectura general
 
-El proyecto sigue una arquitectura tipo medallion en AWS:
+La solución sigue una arquitectura tipo **data lake medallion** con capas Bronze, Silver y Gold en Amazon S3.
 
 ```text
 Kaggle Dataset
    ↓
-S3 Bronze
+Amazon S3 Bronze
    ↓
-ETL / Preprocesamiento
+Silver ETL
    ↓
-S3 Silver
+Amazon S3 Silver
    ↓
-Entrenamiento y scoring del modelo
+ML Training & Scoring
    ↓
-S3 Gold
+Amazon S3 Gold
    ↓
-Glue Data Catalog
-   ↓
-Athena
+AWS Glue Data Catalog + Amazon Athena
    ↓
 Streamlit App
    ↓
-Docker + ECR + ECS Fargate
+Docker → Amazon ECR → ECS Fargate → Application Load Balancer
    ↓
-URL pública
-
-
-
-Las capas principales son:
-
-Bronze: contiene el archivo crudo descargado de Kaggle.
-Silver: contiene los datos limpios y transformados.
-Gold: contiene las predicciones de churn, niveles de riesgo y métricas del modelo.
+Usuario final
 ```
-Fuente de datos
 
-El dataset utilizado es Telco Customer Churn de Kaggle.
+---
 
-Cada fila representa un cliente e incluye variables como:
+## Servicios de AWS utilizados
 
-tipo de contrato
-antigüedad del cliente
-cargos mensuales
-cargos totales
-servicios contratados
-método de pago
-variable objetivo Churn
+- **Amazon S3:** almacenamiento de las capas Bronze, Silver y Gold.
+- **AWS Glue Data Catalog:** catálogo de metadatos para consultar los datos desde Athena.
+- **Amazon Athena:** motor SQL serverless para consultar las tablas externas.
+- **Amazon SageMaker Studio:** ambiente de desarrollo y ejecución del pipeline.
+- **Amazon ECR:** repositorio de la imagen Docker de la aplicación.
+- **Amazon ECS Fargate:** servicio serverless para ejecutar el contenedor de Streamlit.
+- **Application Load Balancer:** exposición pública de la aplicación.
+- **IAM Roles:** permisos seguros para que ECS pueda leer outputs desde S3.
+- **CloudFormation:** definición de infraestructura como código.
 
-Estructura del Repositorio 
+---
+
+## Decisión de arquitectura: sin RDS
+
+Esta versión no utiliza RDS ni SQLAlchemy. La solución está diseñada como un producto analítico basado en data lake:
+
+- S3 almacena los datos crudos, limpios y enriquecidos.
+- Glue cataloga las tablas externas.
+- Athena permite consultar los datos con SQL.
+- Streamlit consume directamente los outputs Gold desde S3 usando `boto3` y `pandas`.
+
+RDS sería una extensión futura si se quisiera guardar información transaccional, como comentarios del usuario, clientes contactados, historial de acciones comerciales o feedback operativo.
+
+---
+
+## Estructura del repositorio
+
 ```text
-
-churn_data_product_starter/
-│
-├── app/
+.
+├── .dockerignore
+├── .gitignore
+├── .python-version
+├── README.md
+├── app
 │   └── streamlit_app.py
-│
-├── data/
-│   ├── sample/
-│   │   └── WA_Fn-UseC_-Telco-Customer-Churn.csv
-│
-├── src/
+├── docker
+│   └── Dockerfile
+├── docs
+│   ├── Definición del Producto.pdf
+│   ├── FAQ del Producto.pdf
+│   └── churn_architecture.png
+├── infra
+│   ├── data_lake_foundation.yaml
+│   └── ecs_streamlit_service.yaml
+├── pyproject.toml
+├── scripts
+│   └── run_pipeline.sh
+├── src
 │   ├── 01_bronze_kaggle_to_s3.py
 │   ├── 02_silver.py
-│   └── 03_gold.py
-│
-├── sql/
-│   └── create_athena_tables.sql
-│
-├── Dockerfile
-├── requirements.txt
-└── README.md
-
+│   ├── 03_gold.py
+│   └── 04_register_athena_tables.py
+└── uv.lock
 
 ```
 
+---
 
-Componentes principales:
+## Componentes principales
 
+### `src/01_bronze_kaggle_to_s3.py`
 
--src/00_upload_local_to_bronze.py
+Descarga el dataset desde Kaggle y carga el archivo CSV crudo a Amazon S3 en la capa Bronze.
 
-Carga el archivo CSV crudo a Amazon S3 en la capa bronze.
+Output principal:
 
+```text
+s3://churn-data-product-780191826160-2026/bronze/WA_Fn-UseC_-Telco-Customer-Churn.csv
+```
 
+---
 
-
--src/02_silver.py
+### `src/02_silver.py`
 
 Limpia y transforma los datos crudos.
 
-Este script realiza tareas como:
+Tareas principales:
 
-limpieza de nombres de columnas
-conversión de TotalCharges a numérico
-codificación de Churn como 0/1
-eliminación de duplicados
-generación de archivo Parquet
+- normaliza nombres de columnas
+- convierte `TotalCharges` a numérico
+- codifica `Churn` como 0/1
+- codifica variables Yes/No seleccionadas
+- elimina duplicados
+- genera un archivo Parquet limpio
 
+Output principal:
 
+```text
+s3://churn-data-product-780191826160-2026/silver/customers_clean.parquet
+```
 
+---
 
--src/03_gold.py
+### `src/03_gold.py`
 
-```Entrena modelos de clasificación para predecir churn.
+Entrena modelos de clasificación y genera la capa Gold.
 
 Modelos utilizados:
 
-Logistic Regression
-Random Forest
+- Logistic Regression
+- Random Forest
 
-Métricas generadas:
+Métricas calculadas:
 
-Accuracy
-Precision
-Recall
-F1
-ROC AUC
+- Accuracy
+- Precision
+- Recall
+- F1
+- ROC AUC
 
-```
+Outputs principales:
 
-
-sql/create_athena_tables.sql
-
-Contiene las sentencias SQL para crear las tablas externas en Athena usando los datos almacenados en S3.
-
-
-
-app/streamlit_app.py
-
-Aplicación web para consumir los resultados del producto de datos.
-
-La app permite:
-
-visualizar resumen ejecutivo
-filtrar clientes por nivel de riesgo
-consultar clientes con mayor probabilidad de churn
-revisar información individual de clientes
-visualizar métricas del modelo
-
-
-
-```Despliegue
-
-La aplicación se empaqueta en una imagen Docker. Después, la imagen se publica en Amazon ECR y se ejecuta en ECS Fargate. El servicio se expone mediante un Application Load Balancer para que el usuario final pueda acceder a una URL pública.
-
-```
-
-
-
-Resultado del modelo
-
-El modelo seleccionado fue Logistic Regression, ya que obtuvo el mejor desempeño según ROC AUC.
-
-Métricas principales:
 ```text
-Accuracy: 0.750
-Precision: 0.519
-Recall: 0.797
-F1: 0.628
-ROC AUC: 0.846
+s3://churn-data-product-780191826160-2026/gold/predictions/churn_predictions.parquet
+s3://churn-data-product-780191826160-2026/gold/metrics/model_metrics.csv
+s3://churn-data-product-780191826160-2026/gold/artifacts/churn_model.joblib
+```
 
+La capa Gold incluye:
 
+- `customer_id`
+- `prob_churn`
+- `prediction`
+- `risk_level`
+- `model_name`
+- variables de contexto del cliente
+
+Los niveles de riesgo se definen así:
+
+```text
 Bajo: probabilidad menor a 0.40
 Medio: probabilidad entre 0.40 y 0.70
 Alto: probabilidad mayor o igual a 0.70
-
 ```
 
-El dashboard ayuda al equipo de retención a identificar clientes con mayor probabilidad de abandono y priorizar acciones comerciales. En lugar de contactar clientes al azar, el usuario puede enfocarse en aquellos con mayor riesgo estimado por el modelo.
+---
 
+### `src/04_register_athena_tables.py`
 
+Registra tablas externas en AWS Glue Data Catalog para que Amazon Athena pueda consultar los archivos almacenados en S3.
 
-<img width="1582" height="1121" alt="Final_drawww drawio" src="https://github.com/user-attachments/assets/579783c4-3ec7-479c-8374-2ec865c018ac" />
+Tablas registradas:
 
-## Aplicación desplegada
+```text
+churn_silver.customers_clean
+churn_gold.churn_predictions
+churn_gold.model_metrics
+```
 
-La aplicación de Streamlit está desplegada en AWS ECS Fargate y puede consultarse en:
+---
 
-PENDIENTE: pegar aquí el LoadBalancerDNSName público.
+### `app/streamlit_app.py`
+
+Aplicación web desarrollada en Streamlit para consumir los outputs Gold del producto de datos.
+
+Funcionalidades principales:
+
+- resumen ejecutivo
+- filtros por nivel de riesgo
+- filtros por tipo de contrato
+- ranking de clientes con mayor probabilidad de churn
+- consulta individual de cliente
+- visualización de métricas del modelo
+- descarga de ranking filtrado
+
+La app lee directamente desde S3:
+
+```text
+gold/predictions/churn_predictions.parquet
+gold/metrics/model_metrics.csv
+```
+
+---
+
+## Bucket principal
+
+```text
+s3://churn-data-product-780191826160-2026/
+```
+
+Estructura:
+
+```text
+bronze/
+silver/
+gold/
+  predictions/
+  metrics/
+  artifacts/
+athena-results/
+```
+---
+
+## Bases y tablas en Glue/Athena
+
+### Database Silver
+
+```text
+churn_silver
+```
+
+Tabla:
+
+```text
+customers_clean
+```
+
+### Database Gold
+
+```text
+churn_gold
+```
+
+Tablas:
+
+```text
+churn_predictions
+model_metrics
+```
+
+Ejemplo de consulta en Athena:
+
+```sql
+SELECT *
+FROM churn_gold.churn_predictions
+LIMIT 10;
+```
+
+Clientes por nivel de riesgo:
+
+```sql
+SELECT
+  risk_level,
+  COUNT(*) AS clientes,
+  AVG(prob_churn) AS prob_churn_promedio
+FROM churn_gold.churn_predictions
+GROUP BY risk_level
+ORDER BY prob_churn_promedio DESC;
+```
+
+Riesgo promedio por contrato:
+
+```sql
+SELECT
+  contract,
+  COUNT(*) AS clientes,
+  AVG(prob_churn) AS riesgo_promedio
+FROM churn_gold.churn_predictions
+GROUP BY contract
+ORDER BY riesgo_promedio DESC;
+```
+
+Top 20 clientes con mayor riesgo:
+
+```sql
+SELECT
+  customer_id,
+  prob_churn,
+  risk_level,
+  contract,
+  tenure,
+  monthlycharges,
+  paymentmethod
+FROM churn_gold.churn_predictions
+ORDER BY prob_churn DESC
+LIMIT 20;
+```
+
+---
+
+## Configuración del ambiente con uv
+
+El proyecto utiliza `uv` para manejar dependencias.
+
+Instalar dependencias:
+
+```bash
+uv sync
+```
+
+Agregar dependencias nuevas:
+
+```bash
+uv add nombre-paquete
+```
+
+Ejecutar Python dentro del ambiente:
+
+```bash
+uv run python --version
+```
+
+---
+
+## Variables de entorno
+
+Variables principales:
+
+```bash
+export CHURN_BUCKET=churn-data-product-780191826160-2026
+export AWS_REGION=us-east-1
+```
+
+La app también puede usar:
+
+```bash
+export CHURN_PREDICTIONS_KEY=gold/predictions/churn_predictions.parquet
+export CHURN_METRICS_KEY=gold/metrics/model_metrics.csv
+```
+
+---
+
+## Ejecución del pipeline completo
+
+El pipeline completo se ejecuta con:
+
+```bash
+export CHURN_BUCKET=churn-data-product-780191826160-2026
+export AWS_REGION=us-east-1
+
+./scripts/run_pipeline.sh
+```
+
+Este script ejecuta:
+
+```text
+1. Bronze: descarga/carga Kaggle → S3
+2. Silver: limpieza y transformación → Parquet
+3. Gold: entrenamiento, predicciones y métricas
+4. Registro de tablas externas en Glue/Athena
+```
+
+---
+
+## Validación de outputs en S3
+
+```bash
+aws s3 ls s3://$CHURN_BUCKET/bronze/
+aws s3 ls s3://$CHURN_BUCKET/silver/
+aws s3 ls s3://$CHURN_BUCKET/gold/predictions/
+aws s3 ls s3://$CHURN_BUCKET/gold/metrics/
+aws s3 ls s3://$CHURN_BUCKET/gold/artifacts/
+```
+
+---
+
+## Ejecutar app localmente en SageMaker Studio
+
+```bash
+export CHURN_BUCKET=churn-data-product-780191826160-2026
+export AWS_REGION=us-east-1
+
+uv run streamlit run app/streamlit_app.py \
+  --server.port=8501 \
+  --server.address=0.0.0.0
+```
+
+En SageMaker Studio, la app se consulta usando el proxy:
+
+```text
+/proxy/8501/
+```
+
+---
+
+## Docker
+
+Construcción local de la imagen:
+
+```bash
+docker build --network sagemaker \
+  -f docker/Dockerfile \
+  -t churn-streamlit-app:latest .
+```
+
+Login a ECR:
+
+```bash
+export AWS_REGION=us-east-1
+export AWS_ACCOUNT_ID=780191826160
+export ECR_REPO=churn-streamlit-app
+export IMAGE_TAG=latest
+export IMAGE_URI=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO:$IMAGE_TAG
+
+aws ecr get-login-password --region $AWS_REGION \
+  | docker login --username AWS --password-stdin \
+  $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
+```
+
+Push a ECR:
+
+```bash
+docker tag $ECR_REPO:$IMAGE_TAG $IMAGE_URI
+docker push $IMAGE_URI
+```
+
+Imagen publicada:
+
+```text
+780191826160.dkr.ecr.us-east-1.amazonaws.com/churn-streamlit-app:latest
+```
+
+---
+
+## Infraestructura
+
+La infraestructura se define mediante CloudFormation.
+
+### Data lake foundation
+
+```text
+infra/data_lake_foundation.yaml
+```
+
+Crea o configura:
+
+- bucket S3 del producto
+- bases de datos Glue
+- repositorio ECR
+
+### ECS Streamlit Service
+
+```text
+infra/ecs_streamlit_service.yaml
+```
+
+Crea:
+
+- ECS Cluster
+- ECS Fargate Service
+- Task Definition
+- IAM Task Role
+- IAM Execution Role
+- Application Load Balancer
+- Target Group
+- Security Groups
+- CloudWatch Logs
+
+---
+
+## Despliegue
+
+El despliegue final sigue este flujo:
+
+```text
+Docker Image
+→ Amazon ECR
+→ ECS Fargate
+→ Application Load Balancer
+→ Public URL
+```
+
+La aplicación desplegada consume los datos Gold desde S3 usando permisos del IAM Task Role asignado al servicio de ECS.
+
+---
+
+## Costos esperados
+
+La solución fue diseñada para mantenerse dentro de un presupuesto bajo y usar servicios serverless o de bajo costo cuando es posible.
+
+Principales componentes de costo:
+
+- almacenamiento S3
+- consultas Athena
+- ejecución de ECS Fargate
+- Application Load Balancer
+- almacenamiento de imagen en ECR
+- logs en CloudWatch
+
+Para una prueba de concepto con pocos datos y uso limitado, el costo esperado es bajo. Para producción, el costo dependería principalmente del tiempo activo de ECS Fargate, el uso del Load Balancer y la frecuencia de consultas en Athena.
+
+---
+
+## Limitaciones
+
+- El dataset es pequeño y público, por lo que la solución funciona como prueba de concepto.
+- El modelo se entrena batch, no en tiempo real.
+- La app consume outputs ya generados, no calcula predicciones bajo demanda.
+- No se guarda feedback del usuario.
+- No se usa RDS porque no hay almacenamiento transaccional en esta versión.
+- No se usa SQLAlchemy porque Streamlit lee directamente desde S3.
+
+---
+
+## Posibles mejoras futuras
+
+- Agregar feedback operativo del equipo de retención.
+- Guardar clientes contactados y acciones comerciales en RDS o DynamoDB.
+- Automatizar el pipeline con EventBridge o Step Functions.
+- Agregar monitoreo de drift del modelo.
+- Agregar autenticación para usuarios finales.
+- Agregar explicación de variables mediante SHAP.
+- Agregar retraining programado.
+- Crear endpoint de inferencia para scoring bajo demanda.
+
+---
+
+## Declaración sobre uso de AI
+
+Durante el desarrollo del proyecto se utilizó inteligencia artificial generativa como apoyo para estructurar documentación, depurar errores, organizar comandos, mejorar la arquitectura y redactar entregables.
+
+La ejecución del pipeline, validación de outputs, configuración de AWS, despliegue de la aplicación y revisión final fueron realizadas por el equipo.
+
+---
+
+## Equipo
+
+Proyecto final de arquitectura de productos de datos.
 
