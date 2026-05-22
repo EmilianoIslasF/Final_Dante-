@@ -11,7 +11,7 @@ El objetivo del producto es que el usuario final pueda priorizar clientes con ma
 La aplicación está desplegada en AWS ECS Fargate y expuesta mediante un Application Load Balancer.
 
 ```text
-PEGAR_URL_PUBLICA_AQUI
+http://churn-streamlit-alb-1369386964.us-east-1.elb.amazonaws.com/
 ```
 
 ---
