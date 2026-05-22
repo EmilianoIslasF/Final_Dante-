@@ -55,25 +55,8 @@ La variable objetivo indica si el cliente abandonó o no el servicio.
 La solución sigue una arquitectura tipo **data lake medallion** con capas Bronze, Silver y Gold en Amazon S3.
 
 ```text
-Kaggle Dataset
-   ↓
-Amazon S3 Bronze
-   ↓
-Silver ETL
-   ↓
-Amazon S3 Silver
-   ↓
-ML Training & Scoring
-   ↓
-Amazon S3 Gold
-   ↓
-AWS Glue Data Catalog + Amazon Athena
-   ↓
-Streamlit App
-   ↓
-Docker → Amazon ECR → ECS Fargate → Application Load Balancer
-   ↓
-Usuario final
+<img width="1901" height="1201" alt="churn_architecture" src="https://github.com/user-attachments/assets/12e82862-f322-4e0c-bc9c-021723f1836f" />
+
 ```
 
 ---
