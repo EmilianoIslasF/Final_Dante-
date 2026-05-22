@@ -477,7 +477,7 @@ Para una prueba de concepto con pocos datos y uso limitado, el costo esperado es
 
 ## Declaración sobre uso de AI
 
-Durante el desarrollo del proyecto se utilizó inteligencia artificial generativa como apoyo para estructurar documentación, depurar errores, organizar comandos, mejorar la arquitectura, redactar entregables y generar versiones iniciales de algunos scripts de Python.
+Durante el desarrollo del proyecto se utilizó inteligencia artificial generativa como apoyo para estructurar documentación, depurar errores, organizar comandos, y generar versiones iniciales de algunos scripts de Python.
 
 En particular, se utilizó AI para apoyar la construcción y mejora de los scripts de ingesta, transformación, entrenamiento, registro de tablas en Athena/Glue y aplicación en Streamlit. También se utilizó como apoyo para agregar comentarios y docstrings que explican los módulos, funciones, inputs y outputs del código.
 
