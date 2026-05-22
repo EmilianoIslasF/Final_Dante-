@@ -54,10 +54,7 @@ La variable objetivo indica si el cliente abandonó o no el servicio.
 
 La solución sigue una arquitectura tipo **data lake medallion** con capas Bronze, Silver y Gold en Amazon S3.
 
-```text
 <img width="1901" height="1201" alt="churn_architecture" src="https://github.com/user-attachments/assets/12e82862-f322-4e0c-bc9c-021723f1836f" />
-
-```
 
 ---
 
