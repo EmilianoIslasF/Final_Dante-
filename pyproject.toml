@@ -1,0 +1,19 @@
+[project]
+name = "churn-data-product"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "awswrangler>=3.16.1",
+    "boto3>=1.43.12",
+    "joblib>=1.5.3",
+    "kaggle>=2.1.2",
+    "matplotlib>=3.10.9",
+    "numpy>=2.4.6",
+    "pandas>=3.0.3",
+    "plotly>=6.7.0",
+    "pyarrow>=24.0.0",
+    "python-dotenv>=1.2.2",
+    "s3fs>=0.4.2",
+    "scikit-learn>=1.8.0",
+    "streamlit>=1.57.0",
+]
