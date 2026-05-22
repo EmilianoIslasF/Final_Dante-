@@ -1,12 +1,18 @@
 """
 Entrena modelos de churn y genera la capa Gold del producto de datos.
 
-Este módulo:
-1. Lee la capa Silver desde S3.
-2. Entrena modelos de clasificación para predecir churn.
-3. Selecciona el mejor modelo por ROC AUC.
-4. Genera predicciones, niveles de riesgo y métricas.
-5. Guarda outputs en S3 para consumo de Streamlit.
+Inputs:
+- Archivo Parquet limpio en S3 Silver.
+- Nombre del bucket S3.
+- Ruta destino para predicciones, métricas y modelo entrenado.
+
+Outputs:
+- Predicciones por cliente en S3 Gold:
+  s3://<bucket>/gold/predictions/churn_predictions.parquet
+- Métricas de modelos en S3 Gold:
+  s3://<bucket>/gold/metrics/model_metrics.csv
+- Modelo entrenado serializado:
+  s3://<bucket>/gold/artifacts/churn_model.joblib
 
 Ejemplo:
 uv run python src/03_gold.py \
@@ -44,27 +50,66 @@ ID_COL = "customer_id"
 
 
 def read_parquet_from_s3(bucket: str, key: str) -> pd.DataFrame:
-    """Read a Parquet file from S3 and return it as a pandas DataFrame."""
+    """
+    Lee un archivo Parquet desde Amazon S3.
+
+    Inputs:
+    - bucket: nombre del bucket S3.
+    - key: ruta del archivo Parquet dentro del bucket.
+
+    Output:
+    - DataFrame con los datos Silver.
+    """
     s3 = boto3.client("s3")
     obj = s3.get_object(Bucket=bucket, Key=key)
     return pd.read_parquet(BytesIO(obj["Body"].read()))
 
 
 def put_bytes_to_s3(data: bytes, bucket: str, key: str) -> None:
-    """Upload bytes to an S3 object."""
+    """
+    Sube contenido en bytes a Amazon S3.
+
+    Inputs:
+    - data: contenido serializado en bytes.
+    - bucket: nombre del bucket S3.
+    - key: ruta destino dentro del bucket.
+
+    Output:
+    - Objeto escrito en S3.
+    """
     s3 = boto3.client("s3")
     s3.put_object(Bucket=bucket, Key=key, Body=data)
 
 
 def write_df_csv_to_s3(df: pd.DataFrame, bucket: str, key: str) -> None:
-    """Write a DataFrame as CSV to S3."""
+    """
+    Guarda un DataFrame como CSV en Amazon S3.
+
+    Inputs:
+    - df: DataFrame a guardar.
+    - bucket: nombre del bucket S3.
+    - key: ruta destino del CSV dentro del bucket.
+
+    Output:
+    - Archivo CSV escrito en S3.
+    """
     buffer = StringIO()
     df.to_csv(buffer, index=False)
     put_bytes_to_s3(buffer.getvalue().encode("utf-8"), bucket, key)
 
 
 def write_df_parquet_to_s3(df: pd.DataFrame, bucket: str, key: str) -> None:
-    """Write a DataFrame as Parquet to S3."""
+    """
+    Guarda un DataFrame como Parquet en Amazon S3.
+
+    Inputs:
+    - df: DataFrame a guardar.
+    - bucket: nombre del bucket S3.
+    - key: ruta destino del Parquet dentro del bucket.
+
+    Output:
+    - Archivo Parquet escrito en S3.
+    """
     buffer = BytesIO()
     df.to_parquet(buffer, index=False)
     buffer.seek(0)
@@ -72,7 +117,16 @@ def write_df_parquet_to_s3(df: pd.DataFrame, bucket: str, key: str) -> None:
 
 
 def build_preprocessor(X: pd.DataFrame) -> ColumnTransformer:
-    """Create preprocessing pipeline for numeric and categorical variables."""
+    """
+    Construye el preprocesador para variables numéricas y categóricas.
+
+    Input:
+    - X: DataFrame de variables predictoras.
+
+    Output:
+    - ColumnTransformer con escalamiento para variables numéricas y
+      one-hot encoding para variables categóricas.
+    """
     numeric_features = X.select_dtypes(
         include=["int64", "float64", "int32", "float32"]
     ).columns.tolist()
@@ -90,7 +144,17 @@ def build_preprocessor(X: pd.DataFrame) -> ColumnTransformer:
 
 
 def train_models(df: pd.DataFrame):
-    """Train candidate models and select the best one by ROC AUC."""
+    """
+    Entrena modelos candidatos y selecciona el mejor según ROC AUC.
+
+    Input:
+    - df: DataFrame Silver con variables predictoras, customer_id y churn.
+
+    Outputs:
+    - Nombre del mejor modelo.
+    - Pipeline entrenado del mejor modelo.
+    - DataFrame con métricas de todos los modelos.
+    """
     X = df.drop(columns=[TARGET, ID_COL])
     y = df[TARGET].astype(int)
 
@@ -158,7 +222,18 @@ def train_models(df: pd.DataFrame):
 
 
 def make_predictions(df: pd.DataFrame, model, model_name: str) -> pd.DataFrame:
-    """Generate churn probabilities, binary predictions and risk levels."""
+    """
+    Genera predicciones, probabilidades de churn y niveles de riesgo.
+
+    Inputs:
+    - df: DataFrame Silver.
+    - model: pipeline entrenado.
+    - model_name: nombre del modelo seleccionado.
+
+    Output:
+    - DataFrame Gold con predicción, probabilidad de churn, nivel de riesgo
+      y variables de contexto del cliente.
+    """
     X = df.drop(columns=[TARGET, ID_COL])
 
     prob_churn = model.predict_proba(X)[:, 1]
@@ -197,7 +272,17 @@ def make_predictions(df: pd.DataFrame, model, model_name: str) -> pd.DataFrame:
 
 
 def save_model_to_s3(model, bucket: str, artifact_key: str) -> None:
-    """Serialize trained model and upload it to S3."""
+    """
+    Serializa el modelo entrenado y lo guarda en Amazon S3.
+
+    Inputs:
+    - model: pipeline entrenado.
+    - bucket: nombre del bucket S3.
+    - artifact_key: ruta destino del modelo dentro del bucket.
+
+    Output:
+    - Archivo joblib del modelo en S3.
+    """
     buffer = BytesIO()
     joblib.dump(model, buffer)
     buffer.seek(0)
@@ -205,13 +290,35 @@ def save_model_to_s3(model, bucket: str, artifact_key: str) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--bucket", required=True)
-    parser.add_argument("--silver-key", default="silver/customers_clean.parquet")
-    parser.add_argument("--gold-prefix", default="gold")
+    """
+    Orquesta el proceso Gold:
+    1. Lee los datos Silver desde S3.
+    2. Entrena y compara modelos.
+    3. Genera predicciones y niveles de riesgo.
+    4. Guarda predicciones, métricas y modelo en S3 Gold.
+    """
+    parser = argparse.ArgumentParser(
+        description="Entrena modelos de churn y genera la capa Gold en S3."
+    )
+
+    parser.add_argument("--bucket", required=True, help="Nombre del bucket S3.")
+
+    parser.add_argument(
+        "--silver-key",
+        default="silver/customers_clean.parquet",
+        help="Ruta del archivo Parquet en S3 Silver.",
+    )
+
+    parser.add_argument(
+        "--gold-prefix",
+        default="gold",
+        help="Prefijo base para guardar outputs Gold.",
+    )
+
     parser.add_argument(
         "--artifact-key",
         default="gold/artifacts/churn_model.joblib",
+        help="Ruta destino del modelo entrenado.",
     )
 
     args = parser.parse_args()

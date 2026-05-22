@@ -2,7 +2,20 @@
 Registra tablas externas de Athena/Glue para consultar las capas Silver y Gold.
 
 Este script no mueve datos. Solo crea metadata en Glue Data Catalog para que
-Athena pueda consultar archivos Parquet/CSV almacenados en S3.
+Athena pueda consultar archivos Parquet/CSV almacenados en Amazon S3.
+
+Inputs:
+- Bucket S3 donde viven las capas Silver y Gold.
+- Región de AWS.
+- Nombres de las bases de datos Glue/Athena.
+- Prefijo de S3 para guardar resultados temporales de Athena.
+
+Outputs:
+- Base de datos churn_silver en Glue/Athena, si no existe.
+- Base de datos churn_gold en Glue/Athena, si no existe.
+- Tabla externa churn_silver.customers_clean.
+- Tabla externa churn_gold.churn_predictions.
+- Tabla externa churn_gold.model_metrics.
 
 Ejemplo:
 uv run python src/04_register_athena_tables.py \
@@ -16,6 +29,38 @@ import argparse
 import time
 
 import boto3
+from botocore.exceptions import ClientError
+
+
+def ensure_glue_database(database: str, region: str) -> None:
+    """
+    Crea una base de datos en Glue Data Catalog si no existe.
+
+    Inputs:
+    - database: nombre de la base de datos Glue/Athena.
+    - region: región de AWS.
+
+    Output:
+    - Base de datos disponible en Glue Data Catalog.
+    """
+    glue = boto3.client("glue", region_name=region)
+
+    try:
+        glue.get_database(Name=database)
+        print(f"Database ya existe: {database}")
+    except ClientError as error:
+        error_code = error.response.get("Error", {}).get("Code")
+
+        if error_code != "EntityNotFoundException":
+            raise
+
+        print(f"Creando database: {database}")
+        glue.create_database(
+            DatabaseInput={
+                "Name": database,
+                "Description": "Database for churn data product tables.",
+            }
+        )
 
 
 def run_athena_query(
@@ -24,7 +69,18 @@ def run_athena_query(
     output_location: str,
     region: str,
 ) -> None:
-    """Ejecuta una consulta DDL en Athena y espera a que termine."""
+    """
+    Ejecuta una consulta DDL en Athena y espera a que termine.
+
+    Inputs:
+    - query: sentencia SQL a ejecutar.
+    - database: base de datos donde se ejecuta la consulta.
+    - output_location: ruta S3 donde Athena guarda resultados temporales.
+    - region: región de AWS.
+
+    Output:
+    - Consulta ejecutada correctamente en Athena.
+    """
     athena = boto3.client("athena", region_name=region)
 
     response = athena.start_query_execution(
@@ -51,23 +107,23 @@ def run_athena_query(
     print(f"Query succeeded: {query_execution_id}")
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--bucket", required=True)
-    parser.add_argument("--region", default="us-east-1")
-    parser.add_argument("--silver-db", default="churn_silver")
-    parser.add_argument("--gold-db", default="churn_gold")
-    parser.add_argument("--athena-results-prefix", default="athena-results")
+def build_table_queries(bucket: str, silver_db: str, gold_db: str) -> list[tuple[str, str]]:
+    """
+    Construye las sentencias SQL para registrar tablas externas.
 
-    args = parser.parse_args()
+    Inputs:
+    - bucket: bucket S3 donde viven las capas Silver y Gold.
+    - silver_db: nombre de la base de datos Silver.
+    - gold_db: nombre de la base de datos Gold.
 
-    output_location = f"s3://{args.bucket}/{args.athena_results_prefix}/"
-
-    queries = [
+    Output:
+    - Lista de tuplas con database y query SQL.
+    """
+    return [
         (
-            args.silver_db,
+            silver_db,
             f"""
-            CREATE EXTERNAL TABLE IF NOT EXISTS {args.silver_db}.customers_clean (
+            CREATE EXTERNAL TABLE IF NOT EXISTS {silver_db}.customers_clean (
               customer_id string,
               gender string,
               seniorcitizen int,
@@ -91,13 +147,13 @@ def main() -> None:
               churn int
             )
             STORED AS PARQUET
-            LOCATION 's3://{args.bucket}/silver/';
+            LOCATION 's3://{bucket}/silver/';
             """,
         ),
         (
-            args.gold_db,
+            gold_db,
             f"""
-            CREATE EXTERNAL TABLE IF NOT EXISTS {args.gold_db}.churn_predictions (
+            CREATE EXTERNAL TABLE IF NOT EXISTS {gold_db}.churn_predictions (
               customer_id string,
               prob_churn double,
               prediction int,
@@ -113,13 +169,13 @@ def main() -> None:
               churn int
             )
             STORED AS PARQUET
-            LOCATION 's3://{args.bucket}/gold/predictions/';
+            LOCATION 's3://{bucket}/gold/predictions/';
             """,
         ),
         (
-            args.gold_db,
+            gold_db,
             f"""
-            CREATE EXTERNAL TABLE IF NOT EXISTS {args.gold_db}.model_metrics (
+            CREATE EXTERNAL TABLE IF NOT EXISTS {gold_db}.model_metrics (
               model_name string,
               accuracy double,
               precision double,
@@ -132,7 +188,7 @@ def main() -> None:
               'separatorChar' = ',',
               'quoteChar' = '"'
             )
-            LOCATION 's3://{args.bucket}/gold/metrics/'
+            LOCATION 's3://{bucket}/gold/metrics/'
             TBLPROPERTIES (
               'skip.header.line.count'='1'
             );
@@ -140,8 +196,54 @@ def main() -> None:
         ),
     ]
 
+
+def main() -> None:
+    """
+    Orquesta el registro de tablas:
+    1. Asegura que existan las bases Glue/Athena.
+    2. Construye el DDL para Silver y Gold.
+    3. Ejecuta las consultas en Athena.
+    """
+    parser = argparse.ArgumentParser(
+        description="Registra tablas externas de Silver y Gold en Athena/Glue."
+    )
+
+    parser.add_argument("--bucket", required=True, help="Nombre del bucket S3.")
+    parser.add_argument("--region", default="us-east-1", help="Región de AWS.")
+
+    parser.add_argument(
+        "--silver-db",
+        default="churn_silver",
+        help="Nombre de la base de datos Silver.",
+    )
+
+    parser.add_argument(
+        "--gold-db",
+        default="churn_gold",
+        help="Nombre de la base de datos Gold.",
+    )
+
+    parser.add_argument(
+        "--athena-results-prefix",
+        default="athena-results",
+        help="Prefijo S3 donde Athena guarda resultados temporales.",
+    )
+
+    args = parser.parse_args()
+
+    output_location = f"s3://{args.bucket}/{args.athena_results_prefix}/"
+
+    ensure_glue_database(args.silver_db, args.region)
+    ensure_glue_database(args.gold_db, args.region)
+
+    queries = build_table_queries(
+        bucket=args.bucket,
+        silver_db=args.silver_db,
+        gold_db=args.gold_db,
+    )
+
     for database, query in queries:
-        print(f"Registering table in database: {database}")
+        print(f"Registrando tabla en database: {database}")
         run_athena_query(
             query=query,
             database=database,
@@ -149,7 +251,7 @@ def main() -> None:
             region=args.region,
         )
 
-    print("Athena/Glue tables registered successfully.")
+    print("Tablas Athena/Glue registradas correctamente.")
 
 
 if __name__ == "__main__":
