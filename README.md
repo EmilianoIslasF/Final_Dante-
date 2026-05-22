@@ -279,55 +279,6 @@ Tablas:
 churn_predictions
 model_metrics
 ```
-
-Ejemplo de consulta en Athena:
-
-```sql
-SELECT *
-FROM churn_gold.churn_predictions
-LIMIT 10;
-```
-
-Clientes por nivel de riesgo:
-
-```sql
-SELECT
-  risk_level,
-  COUNT(*) AS clientes,
-  AVG(prob_churn) AS prob_churn_promedio
-FROM churn_gold.churn_predictions
-GROUP BY risk_level
-ORDER BY prob_churn_promedio DESC;
-```
-
-Riesgo promedio por contrato:
-
-```sql
-SELECT
-  contract,
-  COUNT(*) AS clientes,
-  AVG(prob_churn) AS riesgo_promedio
-FROM churn_gold.churn_predictions
-GROUP BY contract
-ORDER BY riesgo_promedio DESC;
-```
-
-Top 20 clientes con mayor riesgo:
-
-```sql
-SELECT
-  customer_id,
-  prob_churn,
-  risk_level,
-  contract,
-  tenure,
-  monthlycharges,
-  paymentmethod
-FROM churn_gold.churn_predictions
-ORDER BY prob_churn DESC
-LIMIT 20;
-```
-
 ---
 
 ## Configuración del ambiente con uv
@@ -369,7 +320,6 @@ La app también puede usar:
 export CHURN_PREDICTIONS_KEY=gold/predictions/churn_predictions.parquet
 export CHURN_METRICS_KEY=gold/metrics/model_metrics.csv
 ```
-
 ---
 
 ## Ejecución del pipeline completo
@@ -391,39 +341,8 @@ Este script ejecuta:
 3. Gold: entrenamiento, predicciones y métricas
 4. Registro de tablas externas en Glue/Athena
 ```
-
 ---
 
-## Validación de outputs en S3
-
-```bash
-aws s3 ls s3://$CHURN_BUCKET/bronze/
-aws s3 ls s3://$CHURN_BUCKET/silver/
-aws s3 ls s3://$CHURN_BUCKET/gold/predictions/
-aws s3 ls s3://$CHURN_BUCKET/gold/metrics/
-aws s3 ls s3://$CHURN_BUCKET/gold/artifacts/
-```
-
----
-
-## Ejecutar app localmente en SageMaker Studio
-
-```bash
-export CHURN_BUCKET=churn-data-product-780191826160-2026
-export AWS_REGION=us-east-1
-
-uv run streamlit run app/streamlit_app.py \
-  --server.port=8501 \
-  --server.address=0.0.0.0
-```
-
-En SageMaker Studio, la app se consulta usando el proxy:
-
-```text
-/proxy/8501/
-```
-
----
 
 ## Docker
 
@@ -461,7 +380,6 @@ Imagen publicada:
 ```text
 780191826160.dkr.ecr.us-east-1.amazonaws.com/churn-streamlit-app:latest
 ```
-
 ---
 
 ## Infraestructura
@@ -559,9 +477,16 @@ Para una prueba de concepto con pocos datos y uso limitado, el costo esperado es
 
 ## Declaración sobre uso de AI
 
-Durante el desarrollo del proyecto se utilizó inteligencia artificial generativa como apoyo para estructurar documentación, depurar errores, organizar comandos, mejorar la arquitectura y redactar entregables.
+Durante el desarrollo del proyecto se utilizó inteligencia artificial generativa como apoyo para estructurar documentación, depurar errores, organizar comandos, mejorar la arquitectura, redactar entregables y generar versiones iniciales de algunos scripts de Python.
 
-La ejecución del pipeline, validación de outputs, configuración de AWS, despliegue de la aplicación y revisión final fueron realizadas por el equipo.
+En particular, se utilizó AI para apoyar la construcción y mejora de los scripts de ingesta, transformación, entrenamiento, registro de tablas en Athena/Glue y aplicación en Streamlit. También se utilizó como apoyo para agregar comentarios y docstrings que explican los módulos, funciones, inputs y outputs del código.
+
+El uso de AI fue de asistencia y no sustituyó la implementación ni la validación del proyecto. El equipo revisó, adaptó y ejecutó el código generado, validando que cada componente funcionara correctamente. La ejecución del pipeline, validación de outputs, configuración de AWS, despliegue de la aplicación y revisión final fueron realizadas por el equipo.
+
+También se verificó manualmente que los datos se generaran correctamente en S3, que las tablas estuvieran disponibles en Glue/Athena, que la imagen Docker se publicara en ECR y que la aplicación funcionara desde ECS Fargate mediante una URL pública.
+
+Las decisiones principales del producto, como el usuario final, el problema de negocio, la arquitectura tipo data lake, la selección de outputs Gold y la forma de consumo mediante Streamlit, fueron revisadas y ajustadas por el equipo. La AI se utilizó como herramienta de apoyo técnico y de documentación, manteniendo la responsabilidad final del desarrollo, pruebas y entrega en el equipo.
+
 
 ---
 
